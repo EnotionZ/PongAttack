@@ -4,6 +4,7 @@ import math
 import pyglet
 import cocos
 
+
 from cocos.director import director
 from cocos.sprite import Sprite
 
@@ -16,11 +17,14 @@ class CollidableRectSprite(cocos.sprite.Sprite):
     def __init__(self, image, center_x, center_y):
         super(CollidableRectSprite, self).__init__(image)
         self.position = (center_x, center_y)
-        self.vector2 = eu.Vector2(center_x, center_y)
-        self.cshape = cm.AARectShape(self.vector2, self.width/2, self.height/2)
-        print(self.width, self.height, self.cshape, self.vector2)
+        self.update_cshape()
+    def update_cshape(self):
+        self.cshape = cm.AARectShape(eu.Vector2(self.position[0], self.position[1]), self.width/2, self.height/2)
+
 
 # Movements
+
+
 class BounceBoundedMove(cocos.actions.move_actions.Move):
     def __init__(self, width, height, offsetY):
         super(BounceBoundedMove, self).__init__()
@@ -29,7 +33,6 @@ class BounceBoundedMove(cocos.actions.move_actions.Move):
         self.offsetY = offsetY
 
     def start(self):
-        self.target.position = self.width/2, self.height/2
         self.half_width = self.target.width/2
         self.half_height = self.target.height/2
 
@@ -37,19 +40,16 @@ class BounceBoundedMove(cocos.actions.move_actions.Move):
         pos = self.target.position
         vel = self.target.velocity
 
+        self.target.update_cshape()
+
         if pos[0] < self.half_width and vel[0] < 0:
             vel = math.fabs(vel[0]), vel[1]
-            if "collide_left" in vars(self): self.collide_left()
         elif pos[0] > self.width - self.half_width and vel[0] > 0:
             vel = -math.fabs(vel[0]), vel[1]
-            if "collide_right" in vars(self): self.collide_right()
-
         if pos[1] < self.offsetY + self.half_height and vel[1] < 0:
             vel = vel[0], math.fabs(vel[1])
-            if "collide_bottom" in vars(self): self.collide_bottom()
         elif pos[1] > self.height - self.half_height and vel[1] > 0:
             vel = vel[0], -math.fabs(vel[1])
-            if "collide_top" in vars(self): self.collide_top()
 
         self.target.velocity = vel
         self.target.position = pos[0] + vel[0]*dt, pos[1] + vel[1]*dt
@@ -69,21 +69,39 @@ class Monster(cocos.layer.Layer):
 
 
 class Paddle(object):
-    def __init__(self, fixedY):
+    def __init__(self, scene_width, scene_height, fixedY):
         super(Paddle, self).__init__()
 
         self.y = fixedY
-        self.offsetX = 76;
-
+        self.scene_width = scene_width
+        self.scene_height = scene_height
         self.sprite = CollidableRectSprite("images/paddle.png", 100, 400)
 
-    def setPosition(self, x, scene_width):
+        self.setPosition(scene_width/2)
+
+    def setPosition(self, x):
         width = self.sprite.width
         if x < width: x = width
-        elif x > scene_width: x = scene_width
+        elif x > self.scene_width: x = self.scene_width
         self.sprite.position = x-width/2, self.y
+        self.sprite.update_cshape()
 
 
+class GameClock(cocos.actions.base_actions.Action):
+    def __init__( self, duration ):
+        super(GameClock, self).__init__(self, duration)
+        self.duration = duration
+
+    def start(self):
+        if self.duration==0.0:
+            self._done = True
+
+    def step(self, dt):
+        if self._elapsed is None:
+            self._elapsed = 0
+
+        self._elapsed += dt
+        self.target.update(dt);
 class GameScene(cocos.layer.Layer):
     is_event_handler = True
     def __init__(self):
@@ -98,33 +116,38 @@ class GameScene(cocos.layer.Layer):
         track_sprite.position = self.dimension/2, 27
         self.add( track_sprite, z=1 )
 
+
+        # paddle
+        self.paddle = Paddle(self.dimension, self.dimension, 27)
+        self.add( self.paddle.sprite, z=2)
+
+
         # ball and movement
         ball_movement = BounceBoundedMove(self.dimension, self.dimension, 10)
-        ball_movement.collide_bottom = self.ball_collide_bottom
-        self.ball = CollidableRectSprite("images/ball.png", 100, 400)
+        ball_movement.boundedObject = self
+        self.ball = CollidableRectSprite("images/ball.png", self.dimension/2, self.dimension/2)
         self.add(self.ball, z=10)
         self.ball.velocity = (200, 136)
         self.ball.do(ball_movement)
 
+        self.do(GameClock(10))
 
-        # paddle
-        self.paddle = Paddle(27)
-        self.paddle.setPosition(self.dimension/2, self.dimension)
-        self.add( self.paddle.sprite, z=2)
+        self.collision = cm.CollisionManagerBruteForce();
+        self.collision.add(self.paddle.sprite)
+        self.collision.add(self.ball)
 
+        self.paddle_ball_collided = False
 
-        collision = cm.CollisionManager();
-        collision.clear()
-        collision.add(self.paddle.sprite)
-        collision.add(self.ball)
-        print(collision.known_objs(), collision.any_near(100, 400))
-
-    def ball_collide_bottom(self):
-        print ("hit bottom")
-        #print(self.collision.known_objs(), self.collision.they_collide(self.ball, self.paddle.sprite))
+    def update(self, dt):
+        if self.collision.they_collide(self.ball, self.paddle.sprite):
+            if not self.paddle_ball_collided:
+                print("ball and paddle collided", dt)
+            self.paddle_ball_collided = True
+        else:
+            self.paddle_ball_collided = False
 
     def on_mouse_motion (self, x, y, dx, dy):
-        self.paddle.setPosition(x, self.dimension)
+        self.paddle.setPosition(x)
 
 
 
@@ -157,4 +180,11 @@ if __name__ == "__main__":
     game_scene = GameScene()
     # And now, start the application, starting with main_scene
     director.run (cocos.scene.Scene (BackgroundLayer(), game_scene, ForegroundLayer()))
+
+
+
+
+
+
+
 
