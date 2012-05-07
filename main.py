@@ -89,6 +89,7 @@ class Paddle(object):
 class GameClock(cocos.actions.base_actions.IntervalAction):
     def __init__( self, duration ):
         super(GameClock, self).__init__(self, duration)
+        self.duration = duration
     def update(self, t):
         self.target.update(t);
 
