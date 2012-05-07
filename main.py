@@ -19,12 +19,11 @@ class CollidableRectSprite(cocos.sprite.Sprite):
         self.position = (center_x, center_y)
         self.update_cshape()
     def update_cshape(self):
-        self.cshape = cm.AARectShape(eu.Vector2(self.position[0], self.position[1]), self.width/2, self.height/2)
+        vector = eu.Vector2(self.position[0], self.position[1])
+        self.cshape = cm.AARectShape(vector, self.width/2, self.height/2)
 
 
 # Movements
-
-
 class BounceBoundedMove(cocos.actions.move_actions.Move):
     def __init__(self, width, height, offsetY):
         super(BounceBoundedMove, self).__init__()
@@ -75,7 +74,7 @@ class Paddle(object):
         self.y = fixedY
         self.scene_width = scene_width
         self.scene_height = scene_height
-        self.sprite = CollidableRectSprite("images/paddle.png", 100, 400)
+        self.sprite = CollidableRectSprite("images/paddle.png", 0, 0)
 
         self.setPosition(scene_width/2)
 
@@ -87,21 +86,12 @@ class Paddle(object):
         self.sprite.update_cshape()
 
 
-class GameClock(cocos.actions.base_actions.Action):
+class GameClock(cocos.actions.base_actions.IntervalAction):
     def __init__( self, duration ):
         super(GameClock, self).__init__(self, duration)
-        self.duration = duration
+    def update(self, t):
+        self.target.update(t);
 
-    def start(self):
-        if self.duration==0.0:
-            self._done = True
-
-    def step(self, dt):
-        if self._elapsed is None:
-            self._elapsed = 0
-
-        self._elapsed += dt
-        self.target.update(dt);
 class GameScene(cocos.layer.Layer):
     is_event_handler = True
     def __init__(self):
@@ -123,28 +113,21 @@ class GameScene(cocos.layer.Layer):
 
 
         # ball and movement
-        ball_movement = BounceBoundedMove(self.dimension, self.dimension, 10)
-        ball_movement.boundedObject = self
+        self.ball_movement = BounceBoundedMove(self.dimension, self.dimension, 10)
         self.ball = CollidableRectSprite("images/ball.png", self.dimension/2, self.dimension/2)
         self.add(self.ball, z=10)
         self.ball.velocity = (200, 136)
-        self.ball.do(ball_movement)
+        self.ball.do(self.ball_movement)
 
-        self.do(GameClock(10))
+        self.do(GameClock(10000))
 
         self.collision = cm.CollisionManagerBruteForce();
         self.collision.add(self.paddle.sprite)
         self.collision.add(self.ball)
 
-        self.paddle_ball_collided = False
-
     def update(self, dt):
         if self.collision.they_collide(self.ball, self.paddle.sprite):
-            if not self.paddle_ball_collided:
-                print("ball and paddle collided", dt)
-            self.paddle_ball_collided = True
-        else:
-            self.paddle_ball_collided = False
+            print("ball and paddle collided", dt)
 
     def on_mouse_motion (self, x, y, dx, dy):
         self.paddle.setPosition(x)
